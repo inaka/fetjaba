@@ -106,8 +106,8 @@ handle_call(_Call, _From, State) -> {noreply, State}.
 -spec handle_cast(term(), state()) -> {noreply, state()}.
 handle_cast(_Msg, State) -> {noreply, State}.
 %% @private
--spec terminate(_, state()) -> true.
-terminate(_Reason, State) -> catch erlang:port_close(State#state.java_port).
+-spec terminate(_, state()) -> ok.
+terminate(_Reason, State) -> catch erlang:port_close(State#state.java_port), ok.
 %% @private
 -spec code_change(term(), state(), term()) -> {ok, state()}.
 code_change(_OldVersion, State, _Extra) -> {ok, State}.
