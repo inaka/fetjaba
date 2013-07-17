@@ -13,7 +13,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -export([start_link/0, stop/0]).
 
--export([process/0, typeof/1]).
+-export([process/0]).
 
 -record(state, {java_port :: port(),
                 java_node :: atom()}).
@@ -25,16 +25,6 @@
 %% @doc  Starts a new monitor
 -spec start_link() -> {ok, pid()} | {error, term()}.
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-
-%% @doc Returns the name of the class to which the term is translated on Java side
--spec typeof(term()) -> binary().
-typeof(Term) ->
-    ?JAVA_SERVER ! {typeof, Term, self()},
-    receive
-        {typeof, Term, Type} -> Type
-    after 5000 ->
-        throw(timeout)
-    end.
 
 %% @doc Returns the pid of the java server
 -spec process() -> pid().
@@ -89,22 +79,22 @@ init([]) ->
 %% @private
 -spec handle_info({nodedown, atom()}, state()) -> {stop, nodedown, state()} | {noreply, state()}.
 handle_info({nodedown, JavaNode}, State = #state{java_node = JavaNode}) ->
-  lager:error("Java node is down!"),
+  error_logger:error_msg("Java node is down!~n"),
   {stop, nodedown, State};
 handle_info({Port, {data, {eol, "SEVERE: " ++ JavaLog}}}, State = #state{java_port = Port}) ->
-  _ = lager:error("Java Error:\t~s", [JavaLog]),
+  error_logger:warning_msg("Java Error:\t~s~n", [JavaLog]),
   {noreply, State};
 handle_info({Port, {data, {eol, "WARNING: " ++ JavaLog}}}, State = #state{java_port = Port}) ->
-  _ = lager:warning("Java Warning:\t~s", [JavaLog]),
+  error_logger:warning_msg("Java Warning:\t~s~n", [JavaLog]),
   {noreply, State};
 handle_info({Port, {data, {eol, "INFO: " ++ JavaLog}}}, State = #state{java_port = Port}) ->
-  _ = lager:info("Java Info:\t~s", [JavaLog]),
+  error_logger:info_msg("Java Info:\t~s~n", [JavaLog]),
   {noreply, State};
 handle_info({Port, {data, {eol, JavaLog}}}, State = #state{java_port = Port}) ->
-  _ = lager:debug("Java Log:\t~s", [JavaLog]),
+  io:format("Java Log:\t~s~n", [JavaLog]),
   {noreply, State};
 handle_info({Port, {data, {noeol, JavaLog}}}, State = #state{java_port = Port}) ->
-  _ = lager:info("Java Log:\t~s...", [JavaLog]),
+  error_logger:info_msg("Java Log:\t~s...~n", [JavaLog]),
   {noreply, State};
 handle_info(_Info, State) ->
   {noreply, State}.
@@ -117,7 +107,7 @@ handle_call(_Call, _From, State) -> {noreply, State}.
 handle_cast(_Msg, State) -> {noreply, State}.
 %% @private
 -spec terminate(_, state()) -> true.
-terminate(_Reason, State) -> erlang:port_close(State#state.java_port).
+terminate(_Reason, State) -> catch erlang:port_close(State#state.java_port).
 %% @private
 -spec code_change(term(), state(), term()) -> {ok, state()}.
 code_change(_OldVersion, State, _Extra) -> {ok, State}.
@@ -129,7 +119,7 @@ code_change(_OldVersion, State, _Extra) -> {ok, State}.
 priv_dir(App) ->
   case code:priv_dir(App) of
     {error, bad_name} ->
-      lager:info("Couldn't find priv dir for lucene_server, using ./priv"), "./priv";
+      error_logger:info_msg("Couldn't find priv dir for the application, using ./priv~n"), "./priv";
     PrivDir -> filename:absname(PrivDir)
   end.
 
@@ -145,8 +135,10 @@ test_priv_path(Path, {error, _}, _) -> filename:absname(code:lib_dir() ++ Path).
 wait_for_ready(State = #state{java_port = Port}) ->
   receive
     {Port, {data, {eol, "READY"}}} ->
-      _ = lager:notice("Java node started"),
-      true = link(process()),
+      error_logger:info_msg("Java node started~n"),
+      Process = process(),
+      true = link(Process),
+      error_logger:info_msg("Process ~p linked~n", [Process]),
       true = erlang:monitor_node(State#state.java_node, true),
       {ok, State};
     Info ->

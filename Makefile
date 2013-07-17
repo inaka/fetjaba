@@ -1,4 +1,4 @@
-ERLANG := erl -pa ebin -pa deps/*/ebin -smp enable -s lager -s wpool -setcookie my_cookie ${ERL_ARGS}
+ERLANG := erl -pa ebin -pa deps/*/ebin -smp enable -setcookie my_cookie ${ERL_ARGS}
 CLASSPATH := ./bin:/usr/local/lib/erlang/lib/jinterface-1.5.6/priv/OtpErlang.jar:"./priv/*"
 
 all: clean
@@ -26,8 +26,8 @@ shell: erl
 	fi
 
 run: erl
-	if [ -n "${NODE}" ]; then ${ERLANG} -name ${NODE}@`hostname` -boot start_sasl -s fetjaba; \
-	else ${ERLANG} -name fetjaba@`hostname` -boot start_sasl -s fetjaba; \
+	if [ -n "${NODE}" ]; then ${ERLANG} -name ${NODE}@`hostname` -boot start_sasl -s fetjaba_app; \
+	else ${ERLANG} -name fetjaba@`hostname` -boot start_sasl -s fetjaba_app; \
 	fi
 
 test: erl

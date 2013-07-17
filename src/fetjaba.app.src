@@ -4,7 +4,7 @@
   {vsn, "1"},
   {id, "fetjaba"},
   {registered,   [fetjaba]},
-  {applications, [kernel,stdlib,lager]},
+  {applications, [kernel,stdlib]},
   {mod, {fetjaba_app, []}},
   {env, []}
  ]
