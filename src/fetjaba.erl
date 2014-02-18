@@ -13,7 +13,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -export([start_link/0, stop/0]).
 
--export([process/0]).
+-export([process/0, tick/1, tick/2]).
+-export([increasing_length/0, increasing_length/1, increasing_size/0, increasing_size/1, many_requests/0, many_requests/2]).
 
 -record(state, {java_port :: port(),
                 java_node :: atom()}).
@@ -35,6 +36,63 @@ process() ->
     after 5000 ->
         throw(timeout)
     end.
+
+-spec many_requests() -> [{pos_integer(), float()}].
+many_requests() ->
+  Data = << <<($a + I rem 26)>> ||  I <- lists:seq(1, 50000) >>,
+  [{I, many_requests(Data, I)} || I <- lists:seq(10, 1000, 10)].
+
+-spec many_requests(term(), pos_integer()) -> float().
+many_requests(Data, Times) ->
+  {T, _} = timer:tc(fun() -> [tick(Data) || _ <- lists:seq(1, Times)] end),
+  T/1000.
+
+
+-spec increasing_size() -> [{pos_integer(), float()}].
+increasing_size() ->
+  [{I, increasing_size(I)} || I <- lists:seq(10000, 1000000, 10000)].
+
+-spec increasing_size(pos_integer()) -> float().
+increasing_size(Length) ->
+  Data = << <<($a + I rem 26)>> ||  I <- lists:seq(1, Length) >>,
+  {T, _} = timer:tc(?MODULE, tick, [Data]),
+  T/1000.
+
+
+-spec increasing_length() -> [{pos_integer(), float()}].
+increasing_length() ->
+  [increasing_length(I) || I <- lists:seq(2500, 250000, 2500)].
+
+-spec increasing_length(pos_integer()) -> {pos_integer(), float()}.
+increasing_length(Length) ->
+  Data = [list_to_atom([$a + I rem 26]) || I <- lists:seq(1, Length)],
+  {T, _} = timer:tc(?MODULE, tick, [Data]),
+  {byte_size(term_to_binary(Data)) - 7, T/1000}.
+
+
+-spec tick(pos_integer() | binary(), pos_integer()) -> proplists:proplist().
+tick(Length, Times) when is_integer(Length) ->
+  %tick(<< <<($a + I rem 26)>> ||  I <- lists:seq(1, Length) >>, Times);
+  tick([list_to_atom([$a + I rem 26]) || I <- lists:seq(1, Length)], Times);
+tick(Data, Times) ->
+  TS0 = ts(),
+  [tick(Data) || _ <- lists:seq(1, Times)],
+  ts() - TS0.
+
+-spec tick(pos_integer() | binary()) -> proplists:proplist().
+tick(Length) when is_integer(Length) ->
+  %tick(<< <<($a + I rem 26)>> ||  I <- lists:seq(1, Length) >>);
+  tick([list_to_atom([$a + I rem 26]) || I <- lists:seq(1, Length)]);
+tick(Data) ->
+  TS1 = ts(),
+  ?JAVA_SERVER ! {tick, self(), Data, TS1, TS1, TS1},
+  receive
+    {tick, _Pid, Data, TS1, TS2, TS3} ->
+      TS4 = ts(),
+      [{'erl->java', TS2 - TS1}, {'in-java', TS3 - TS2}, {'java->erl', TS4 - TS3}, {total, TS4 - TS1}, {size, byte_size(term_to_binary(Data))}]
+  after 30000 ->
+    throw(timeout)
+  end.
 
 %% @doc Stops the java process
 -spec stop() -> stop.
@@ -155,3 +213,7 @@ java_node() ->
       [Name, Server] -> list_to_atom(Name ++ "_java@" ++ Server);
       _Node -> throw({bad_node_name, node()})
     end.
+
+ts() ->
+  {X, Y, Z} = os:timestamp(),
+  X * 1000000000 + Y * 1000 + trunc(Z / 1000).

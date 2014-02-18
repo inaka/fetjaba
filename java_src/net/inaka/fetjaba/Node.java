@@ -5,6 +5,8 @@ import java.io.IOException;
 import com.ericsson.otp.erlang.OtpErlangAtom;
 import com.ericsson.otp.erlang.OtpErlangDecodeException;
 import com.ericsson.otp.erlang.OtpErlangExit;
+import com.ericsson.otp.erlang.OtpErlangList;
+import com.ericsson.otp.erlang.OtpErlangLong;
 import com.ericsson.otp.erlang.OtpErlangObject;
 import com.ericsson.otp.erlang.OtpErlangPid;
 import com.ericsson.otp.erlang.OtpErlangTuple;
@@ -17,10 +19,10 @@ import com.ericsson.otp.erlang.OtpNode;
  */
 public class Node {
 	/** This Erlang node */
-	public static OtpNode	NODE;
+	public static OtpNode NODE;
 
 	/** Peer node name */
-	public static String	PEER;
+	public static String PEER;
 
 	/**
 	 * @param args
@@ -42,20 +44,13 @@ public class Node {
 					boolean run = true;
 					while (run) { // This thread runs forever
 						try {
-							OtpErlangObject msg = mbox.receive(); // Gets the
-																	// message
-							run = processMsg(msg, mbox); // and deals with it,
-															// before getting
-															// the next one
-						} catch (OtpErlangExit oee) { // Until it gets an exit
-														// signal
-							System.exit(1); // And, this is a little bit
-											// violent, but it gets the job
-											// done.
+							OtpErlangObject msg = mbox.receive();
+							run = processMsg(msg, mbox);
+						} catch (OtpErlangExit oee) {
+							System.exit(1);
 						} catch (OtpErlangDecodeException oede) {
 							oede.printStackTrace();
-							System.out
-									.println("That was a bad message, moving on...");
+							System.out.println("bad message, moving on...");
 						}
 					}
 				}
@@ -69,22 +64,26 @@ public class Node {
 
 	protected static boolean processMsg(OtpErlangObject msg, OtpMbox mbox)
 			throws OtpErlangDecodeException {
+		OtpErlangLong ts2 = new OtpErlangLong(System.currentTimeMillis());
 		if (msg instanceof OtpErlangAtom
 				&& ((OtpErlangAtom) msg).atomValue().equals("stop")) {
 			mbox.close();
 			return false;
 		} else if (msg instanceof OtpErlangTuple) {
-			OtpErlangObject[] elements = ((OtpErlangTuple) msg).elements();
-			if (elements.length == 2) {
-				if (elements[0] instanceof OtpErlangAtom
-						&& ((OtpErlangAtom) elements[0]).atomValue().equals(
-								"pid") && elements[1] instanceof OtpErlangPid) {
-					OtpErlangPid caller = (OtpErlangPid) elements[1];
-					mbox.send(caller, new OtpErlangTuple(new OtpErlangObject[] {
-							elements[0], mbox.self() }));
-					return true;
-				}
+			OtpErlangTuple cmd = (OtpErlangTuple) msg;
+			OtpErlangAtom cmdName = (OtpErlangAtom) cmd.elementAt(0);
+			OtpErlangPid caller = (OtpErlangPid) cmd.elementAt(1);
+			OtpErlangObject result = new OtpErlangAtom("undefined");
+			if (cmdName.atomValue().equals("pid")) {
+				result = new OtpErlangTuple(new OtpErlangObject[] { cmdName,
+						mbox.self() });
+			} else if (cmdName.atomValue().equals("tick")) {
+				result = new OtpErlangTuple(new OtpErlangObject[] { cmdName,
+						mbox.self(), cmd.elementAt(2), cmd.elementAt(3), ts2,
+						new OtpErlangLong(System.currentTimeMillis()) });
 			}
+			mbox.send(caller, result);
+			return true;
 		}
 		throw new OtpErlangDecodeException("Bad message: " + msg.toString());
 	}
